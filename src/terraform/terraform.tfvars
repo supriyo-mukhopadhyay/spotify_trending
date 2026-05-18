@@ -1,0 +1,5 @@
+project = "spotify_api"
+region = "eu-west-1"
+vpc_id = "vpc-0796aa44a733f132e"
+public_subnet_a_id = "subnet-0a87a8eebca7d57bc"
+spapi_bucket_name = "spapi-808429836131-eu-west-1-bucket"

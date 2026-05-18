@@ -6,3 +6,5 @@ awswrangler
 IPython
 ipykernel
 pylance
+requests
+dotenv

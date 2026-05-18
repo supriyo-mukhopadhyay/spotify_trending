@@ -46,46 +46,46 @@ def get_token(client_id: str, client_secret: str, url: str) -> Dict[Any, Any]:
 def get_auth_header(access_token: str) -> Dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
-# kwargs = {
-#         "client_id": CLIENT_ID,
-#         "client_secret": CLIENT_SECRET,
-#         "url": URL_TOKEN,
-#     }
+kwargs = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "url": URL_TOKEN,
+    }
 
-# token = get_token(**kwargs)
-# # Define the Spotify API endpoint
-# endpoint = 'https://api.spotify.com/v1/browse/new-releases'
+token = get_token(**kwargs)
+# Define the Spotify API endpoint
+endpoint = 'https://api.spotify.com/v1/browse/new-releases'
 
-# print(token["access_token"])
+print(token["access_token"])
 
-# headers = get_auth_header(access_token=token["access_token"])
+headers = get_auth_header(access_token=token["access_token"])
 
-# # Define the number of requests to make
-# num_requests = 200
+# Define the number of requests to make
+num_requests = 200
 
-# # Define the interval between requests (in seconds)
-# request_interval = 0.2  # Adjust as needed based on the API rate limit
+# Define the interval between requests (in seconds)
+request_interval = 0.2  # Adjust as needed based on the API rate limit
 
-# # Store the timestamps of successful requests
-# success_timestamps = []
+# Store the timestamps of successful requests
+success_timestamps = []
 
-# # Make repeated requests to the endpoint
-# for i in range(num_requests):
-#     # Make the request
-#     response = requests.get(url=endpoint, headers=headers)
+# Make repeated requests to the endpoint
+for i in range(num_requests):
+    # Make the request
+    response = requests.get(url=endpoint, headers=headers)
     
-#     # Check if the request was successful
-#     if response.status_code == 200:
-#         success_timestamps.append(time.time())
-#     else:        
-#         print(f'Request {i+1}: Failed with code {response.status_code}')
+    # Check if the request was successful
+    if response.status_code == 200:
+        success_timestamps.append(time.time())
+    else:        
+        print(f'Request {i+1}: Failed with code {response.status_code}')
     
-#     # Wait for the specified interval before making the next request
-#     time.sleep(request_interval)
+    # Wait for the specified interval before making the next request
+    time.sleep(request_interval)
 
-# # Calculate the time between successful requests
-# if len(success_timestamps) > 1:
-#     time_gaps = [success_timestamps[i] - success_timestamps[i-1] for i in range(1, len(success_timestamps))]
-#     print(f'Average time between successful requests: {sum(time_gaps) / len(time_gaps):.2f} seconds')
-# else:
-#     print('At least two successful requests are needed to calculate the time between requests.')
+# Calculate the time between successful requests
+if len(success_timestamps) > 1:
+    time_gaps = [success_timestamps[i] - success_timestamps[i-1] for i in range(1, len(success_timestamps))]
+    print(f'Average time between successful requests: {sum(time_gaps) / len(time_gaps):.2f} seconds')
+else:
+    print('At least two successful requests are needed to calculate the time between requests.')
