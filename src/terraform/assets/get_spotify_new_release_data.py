@@ -6,7 +6,7 @@ import json
 import os
 from dotenv import load_dotenv
 from awsglue.context import GlueContext
-from pyspark.core.context import SparkContext
+from pyspark.context import SparkContext
 from awsglue.dynamicframe import DynamicFrame
 from awsglue.utils import getResolvedOptions
 from awsglue.job import Job
@@ -24,8 +24,8 @@ args = getResolvedOptions(
 )
 
 
-CLIENT_ID = os.getenv("CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET", "")
+CLIENT_ID = "8d1b1e30ecea43daa9f4d3bfc41c9414"
+CLIENT_SECRET = "32c4b4532c17462face29d83c456ff32"
 
 ACCESS_KEY = os.getenv("ACCESS_KEY")
 SECRETE_ACCESS_KEY = os.getenv("SECRET_ACCESS_KEY")
@@ -82,7 +82,11 @@ class authentication:
             logging.error(
                 {
                     "Message": f"error getting authentication token : {err}",
-                    "line": format(sys.exc_info()[-1].tb_lineno),
+                    "line": format(
+                        sys.exc_info()[
+                            -1
+                        ].tb_lineno  # pyright: ignore[reportOptionalMemberAccess]
+                    ),
                 }
             )
             return {}
@@ -148,7 +152,11 @@ class endpoints:
             logging.error(
                 {
                     "Message": f"Error occurred during request {err} for request url {request_url}",
-                    "line": format(sys.exc_info()[-1].tb_lineno),
+                    "line": format(
+                        sys.exc_info()[
+                            -1
+                        ].tb_lineno  # pyright: ignore[reportOptionalMemberAccess]
+                    ),
                 }
             )
             return []
@@ -222,7 +230,11 @@ class endpoints:
             logging.error(
                 {
                     "Message": f"Error occurred during request {err} for request url {request_url}",
-                    "line": format(sys.exc_info()[-1].tb_lineno),
+                    "line": format(
+                        sys.exc_info()[
+                            -1
+                        ].tb_lineno  # pyright: ignore[reportOptionalMemberAccess]
+                    ),
                 }
             )
             return []
