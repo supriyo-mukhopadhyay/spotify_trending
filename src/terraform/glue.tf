@@ -1,3 +1,11 @@
+# resource "aws_vpc" "main"{}
+
+# resource "aws_subnet" "public_a_id"{
+#   vpc_id = var.vpc_id
+# }
+
+
+
 resource "aws_glue_job" "spotify_staging_api" {
   name         = "${var.project}-spotify-staging-job"
   role_arn     = aws_iam_role.glue_role.arn
@@ -16,10 +24,10 @@ resource "aws_glue_job" "spotify_staging_api" {
     "--enable-metrics"                      = "true"
     "--s3_bucket"                           = var.spapi_bucket_name
     "--target_path"                         = "staging_data/"
-    "--additional-python-modules"           = "dotenv, requests,pyspark, pyspark.core"
+    "--additional-python-modules"           = "dotenv, requests"
   }
 
-  timeout = 1500
+  timeout = 500
 
   number_of_workers = 2
   worker_type       = "G.1X"

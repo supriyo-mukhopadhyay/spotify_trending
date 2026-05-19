@@ -10,7 +10,7 @@ from pyspark.core.context import SparkContext
 from awsglue.dynamicframe import DynamicFrame
 from awsglue.utils import getResolvedOptions
 from awsglue.job import Job
-
+import time
 
 load_dotenv()
 # Get arguments that are passed when running the script
@@ -24,8 +24,8 @@ args = getResolvedOptions(
 )
 
 
-CLIENT_ID = os.getenv("CLIENT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+CLIENT_ID = os.getenv("CLIENT_ID", "")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET", "")
 
 ACCESS_KEY = os.getenv("ACCESS_KEY")
 SECRETE_ACCESS_KEY = os.getenv("SECRET_ACCESS_KEY")
@@ -33,7 +33,6 @@ SECRETE_ACCESS_KEY = os.getenv("SECRET_ACCESS_KEY")
 URL_TOKEN = "https://accounts.spotify.com/api/token"
 URL_NEW_RELEASES = "https://api.spotify.com/v1/browse/new-releases"
 URL_ALBUM_TRACKS = "https://api.spotify.com/v1/albums"
-
 
 
 ################################# Logging ###############################################
@@ -50,12 +49,12 @@ logging.basicConfig(
 
 
 class authentication:
-    
+
     def __init__(self):
-        logging.info({"Message":"Authentication class initiated !"})
-    
+        logging.info({"Message": "Authentication class initiated !"})
+
     def get_token(self, client_id: str, client_secret: str, url: str) -> Dict[Any, Any]:
-        """Allows to perform a POST request to obtain an access token 
+        """Allows to perform a POST request to obtain an access token
 
         Args:
             client_id (str): App client id
@@ -81,25 +80,25 @@ class authentication:
 
         except Exception as err:
             logging.error(
-            {
-                "Message": f"error getting authentication token : {err}",
-            }
-        )
+                {
+                    "Message": f"error getting authentication token : {err}",
+                    "line": format(sys.exc_info()[-1].tb_lineno),
+                }
+            )
             return {}
-    
+
     def get_auth_header(self, access_token: str) -> Dict[str, str]:
         return {"Authorization": f"Bearer {access_token}"}
-    
 
 
 class endpoints:
-    
+
     def __init__(self):
-        logging.info({"Message":"endpoints class initiated !"})
+        logging.info({"Message": "endpoints class initiated !"})
         self.authentication = authentication()
-    
-    def get_paginated_new_releases(self, 
-        base_url: str, access_token: str, get_token: Callable, **kwargs
+
+    def get_paginated_new_releases(
+        self, base_url: str, access_token: str, get_token: Callable, **kwargs
     ) -> list:
         """Performs paginated calls to the new releases endpoint. Manages token refresh when required.
 
@@ -117,33 +116,50 @@ class endpoints:
 
         try:
             while request_url:
-                logging.info({"Message":f"Requesting to: {request_url} -> return paginated new releases"})
+                logging.info(
+                    {
+                        "Message": f"Requesting to: {request_url} -> return paginated new releases"
+                    }
+                )
                 response = requests.get(url=request_url, headers=headers)
+                retry_after = response.headers.get("Retry-After")
 
                 if response.status_code == 401:
                     token_response = get_token(**kwargs)
-                    headers = self.authentication.get_auth_header(access_token=token_response["access_token"])
+                    headers = self.authentication.get_auth_header(
+                        access_token=token_response["access_token"]
+                    )
+                    response = requests.get(url=request_url, headers=headers)
                 # print(response)
-                
-                response_json = response.json()
-                new_releases_data.extend(response_json["albums"]["items"])
-                request_url = response_json["albums"]["next"]
+
+                if response.status_code == 429:
+                    logging.info(
+                        {"Message": f"waiting for {retry_after} untill next request"}
+                    )
+                    time.sleep(int(retry_after))
+
+                if response.status_code == 200:
+                    response_json = response.json()
+                    new_releases_data.extend(response_json["albums"]["items"])
+                    request_url = response_json["albums"]["next"]
             return new_releases_data
 
         except Exception as err:
             logging.error(
-            {
-                "Message": f"Error occurred during request {err} for request url {request_url}",
-            })
+                {
+                    "Message": f"Error occurred during request {err} for request url {request_url}",
+                    "line": format(sys.exc_info()[-1].tb_lineno),
+                }
+            )
             return []
-    
-    
-    def get_paginated_album_tracks(self,
-    base_url: str,
-    access_token: str,
-    album_id: str,
-    get_token: Callable,
-    **kwargs,
+
+    def get_paginated_album_tracks(
+        self,
+        base_url: str,
+        access_token: str,
+        album_id: str,
+        get_token: Callable,
+        **kwargs,
     ) -> list:
         """Performs paginated requests to the album/{album_id}/tracks endpoint
 
@@ -156,7 +172,7 @@ class endpoints:
         Returns:
             list: Request responses stored as a list
         """
-      
+
         headers = self.authentication.get_auth_header(access_token=access_token)
         #  Create the requests_url by using the base_url and album_id parameters. At the end, you will add tracks to the URL endpoint.
         request_url = f"{base_url}/{album_id}/tracks"
@@ -164,48 +180,70 @@ class endpoints:
 
         try:
             while request_url:
-                logging.info({"Message": f"Requesting to: {request_url} -> return paginated album details"})
+                logging.info(
+                    {
+                        "Message": f"Requesting to: {request_url} -> return paginated album details"
+                    }
+                )
                 # Perform a GET request using the request_url and headers that you created in the previous steps.
                 response = requests.get(url=request_url, headers=headers)
+                retry_after = response.headers.get("Retry-After")
                 # print(f"response {response}")
 
                 if response.status_code == 401:  # Unauthorized
                     # Handle token expiration and update.
                     token_response = get_token(**kwargs)
-                        # Call get_auth_header() function with the "access_token" from the token_response.
-                    headers = self.authentication.get_auth_header(access_token=token_response["access_token"])
+                    # Call get_auth_header() function with the "access_token" from the token_response.
+                    headers = self.authentication.get_auth_header(
+                        access_token=token_response["access_token"]
+                    )
+                    response = requests.get(url=request_url, headers=headers)
                     logging.info(
-                        {"Message":"Token has been refreshed for paginated album details"}
-                        )
+                        {
+                            "Message": "Token has been refreshed for paginated album details"
+                        }
+                    )
 
-                # Convert the response to json using the json() method.
-                response_json = response.json()
-                album_data.extend(response_json["items"])
+                if response.status_code == 429:
+                    logging.info(
+                        {"Message": f"waiting for {retry_after} untill next request"}
+                    )
+                    time.sleep(int(retry_after))
+
+                if response.status_code == 200:
+                    # Convert the response to json using the json() method.
+                    # print(response.headers.get("Retry-After"))
+                    response_json = response.json()
+                    album_data.extend(response_json["items"])
+                    request_url = response_json["items"]["next"]
             return album_data
 
         except Exception as err:
             logging.error(
-            {
-                "Message": f"Error occurred during request {err} for request url {request_url}",
-            })
+                {
+                    "Message": f"Error occurred during request {err} for request url {request_url}",
+                    "line": format(sys.exc_info()[-1].tb_lineno),
+                }
+            )
             return []
-        
-        
-        
+
+
 # main()function
 
 kwargs = {
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "url": URL_TOKEN,
-    }
+    "client_id": CLIENT_ID,
+    "client_secret": CLIENT_SECRET,
+    "url": URL_TOKEN,
+}
 
-token = authentication.get_token(**kwargs)
+auth = authentication()
+ep = endpoints()
+token = auth.get_token(**kwargs)
 
-new_releases = endpoints.get_paginated_new_releases(
+new_releases = ep.get_paginated_new_releases(
     base_url=URL_NEW_RELEASES,
     access_token=token["access_token"],
-    get_token=authentication.get_token,
+    get_token=auth.get_token,
     **kwargs,
 )
 
@@ -217,19 +255,17 @@ album_items = {}
 
 
 for album_id in albums_ids:
-    
-    album_data = endpoints.get_paginated_album_tracks(
+
+    album_data = ep.get_paginated_album_tracks(
         base_url=URL_ALBUM_TRACKS,
         access_token=token["access_token"],
         album_id=album_id,
-        get_token=authentication.get_token,
+        get_token=auth.get_token,
         **kwargs,
     )
-    
+
     album_items[album_id] = album_data
-    logging.info({
-        "message" : f"Album id {album_id} processed."
-    })
+    logging.info({"message": f"Album id {album_id} processed."})
 
 sc = SparkContext()
 glueContext = GlueContext(sc)
@@ -243,11 +279,9 @@ dest_df = DynamicFrame.fromDF(dest_pd, glueContext, "dest_df")
 job = Job(glueContext)
 # Initialize the Job
 job.init(args["JOB_NAME"], args)
-connection_options = (
-    {
-            "path": f"s3://{args['s3_bucket']}/{args['target_path']}/",
-    }
-)
+connection_options = {
+    "path": f"s3://{args['s3_bucket']}/{args['target_path']}/",
+}
 
 # Write the previous Glue DynamicFrame to a parquet file in a given S3 path
 datasink = glueContext.write_dynamic_frame.from_options(
@@ -257,6 +291,3 @@ datasink = glueContext.write_dynamic_frame.from_options(
     connection_options=connection_options,
     transformation_ctx="datasink",
 )
-
-# with open("./dags/transform.json", "w") as file:
-#             file.write(json.dumps(album_items))
