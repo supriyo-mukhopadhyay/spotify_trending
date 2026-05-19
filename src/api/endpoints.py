@@ -39,3 +39,55 @@ def get_paginated_new_releases(
         print(f"Error occurred during request: {err}")
         return []
     
+
+
+
+def get_paginated_album_tracks(
+    base_url: str,
+    access_token: str,
+    album_id: str,
+    get_token: Callable,
+    **kwargs,
+) -> list:
+    """Performs paginated requests to the album/{album_id}/tracks endpoint
+
+    Args:
+        base_url (str): Base URL for endpoint requests
+        access_token (str): Access token
+        album_id (str): Id of the album to be queried
+        get_token (Callable): Function that requests access token
+
+    Returns:
+        list: Request responses stored as a list
+    """
+    ### Exercise 5:
+    ### START CODE HERE ### (~ 23 lines of code)
+    # Call the get_auth_header() function with the access token.
+    headers = get_auth_header(access_token=access_token)
+    #  Create the requests_url by using the base_url and album_id parameters. At the end, you will add tracks to the URL endpoint.
+    request_url = f"{base_url}/{album_id}/tracks"
+    album_data = []
+
+    try:
+        while request_url:
+            print(f"Requesting to: {request_url}")
+            # Perform a GET request using the request_url and headers that you created in the previous steps.
+            response = requests.get(url=request_url, headers=headers)
+            # print(f"response {response}")
+
+            if response.status_code == 401:  # Unauthorized
+                # Handle token expiration and update.
+                token_response = get_token(**kwargs)
+                    # Call get_auth_header() function with the "access_token" from the token_response.
+                headers = get_auth_header(access_token=token_response["access_token"])
+                print("Token has been refreshed")
+
+            # Convert the response to json using the json() method.
+            response_json = response.json()
+            print(response_json)
+        return album_data
+    ### END CODE HERE ###
+
+    except Exception as err:
+        print(f"Error occurred during request: {err}")
+        return []
