@@ -54,7 +54,7 @@
 As a Data Engineer, I worked on collecting and analyzing the latest song releases and streaming trends from Spotify to identify the most trending songs globally. The project involved extracting real-time music chart data, and generating analytical reports to highlight current listening trends and audience preferences.
 '''
 
-## Project
+## Key Features
 
 1. Web scraping
 2. Preparing data for analytical studies
