@@ -8,28 +8,33 @@ from dotenv import load_dotenv
 from awsglue.context import GlueContext
 from pyspark.context import SparkContext
 from awsglue.dynamicframe import DynamicFrame
+from pyspark.sql.types import StructType, StructField, StringType
 from awsglue.utils import getResolvedOptions
 from awsglue.job import Job
 import time
+import pandas as pd
+import boto3
 
 load_dotenv()
 # Get arguments that are passed when running the script
-args = getResolvedOptions(
-    sys.argv,
-    [
-        "JOB_NAME",
-        "s3_bucket",
-        "target_path",
-    ],
-)
+# args = getResolvedOptions(
+#     sys.argv,
+#     [
+#         "JOB_NAME",
+#         "s3_bucket",
+#         "target_path",
+#         "source_path"
+#     ],
+# )
 
 
 CLIENT_ID = "8d1b1e30ecea43daa9f4d3bfc41c9414"
 CLIENT_SECRET = "32c4b4532c17462face29d83c456ff32"
 
 ACCESS_KEY = os.getenv("ACCESS_KEY")
-SECRETE_ACCESS_KEY = os.getenv("SECRET_ACCESS_KEY")
-
+SECRET_ACCESS_KEY = os.getenv("SECRET_ACCESS_KEY")
+REGION = "eu-west-1"
+BUCKET_NAME = "spapi-808429836131-eu-west-1-bucket"
 URL_TOKEN = "https://accounts.spotify.com/api/token"
 URL_NEW_RELEASES = "https://api.spotify.com/v1/browse/new-releases"
 URL_ALBUM_TRACKS = "https://api.spotify.com/v1/albums"
@@ -222,8 +227,9 @@ class endpoints:
                     # Convert the response to json using the json() method.
                     # print(response.headers.get("Retry-After"))
                     response_json = response.json()
+                    # print(response_json)
                     album_data.extend(response_json["items"])
-                    request_url = response_json["items"]["next"]
+                    request_url = response_json["next"]
             return album_data
 
         except Exception as err:
@@ -262,9 +268,18 @@ new_releases = ep.get_paginated_new_releases(
 
 albums_ids = [album["id"] for album in new_releases]
 
-
+import csv
 album_items = {}
+#5apkkoLPJJYZcghFfuNTF3
 
+# album_data = ep.get_paginated_album_tracks(
+#         base_url=URL_ALBUM_TRACKS,
+#         access_token=token["access_token"],
+#         album_id="5apkkoLPJJYZcghFfuNTF3",
+#         get_token=auth.get_token,
+#         **kwargs,
+#     )
+# print(album_data)
 
 for album_id in albums_ids:
 
@@ -275,31 +290,116 @@ for album_id in albums_ids:
         get_token=auth.get_token,
         **kwargs,
     )
-
+    # album_items["id"] = album_id
     album_items[album_id] = album_data
-    logging.info({"message": f"Album id {album_id} processed."})
+    Ed = album_items[album_id]
+    df = open('data_file.csv', 'w')
+    cw = csv.writer(df)
+#     logging.info({"message": f"Album id {album_id} processed."})
+c = 0
+for emp in Ed:
+    if c == 0:
 
-sc = SparkContext()
-glueContext = GlueContext(sc)
-# Spark Session, the entry point to programming Spark with the Dataset and DataFrame API
-spark = glueContext.spark_session
-# Generate a Spark DataFrame from dict
-dest_pd = spark.createDataFrame(album_items)
-# Generate a  Glue DynamicFrame from Spark DataFrame
-dest_df = DynamicFrame.fromDF(dest_pd, glueContext, "dest_df")
-# Instanciate a Glue Job with the Glue context
-job = Job(glueContext)
-# Initialize the Job
-job.init(args["JOB_NAME"], args)
-connection_options = {
-    "path": f"s3://{args['s3_bucket']}/{args['target_path']}/",
-}
+        # Writing headers of CSV file
+        h = emp.keys()
+        cw.writerow(h)
+        c += 1
 
-# Write the previous Glue DynamicFrame to a parquet file in a given S3 path
-datasink = glueContext.write_dynamic_frame.from_options(
-    frame=dest_df,
-    connection_type="s3",
-    format="json",
-    connection_options=connection_options,
-    transformation_ctx="datasink",
+    # Writing data of CSV file
+    cw.writerow(emp.values())
+
+df.close()
+session = boto3.Session(
+    aws_access_key_id=ACCESS_KEY,
+    aws_secret_access_key=SECRET_ACCESS_KEY,
+    region_name=REGION,
 )
+
+# Get arguments that are passed when running the script
+s3Resource = boto3.resource(
+    "s3", aws_access_key_id=ACCESS_KEY, aws_secret_access_key=SECRET_ACCESS_KEY
+)
+s3Client = boto3.client(
+    "s3", aws_access_key_id=ACCESS_KEY, aws_secret_access_key=SECRET_ACCESS_KEY
+)
+
+try:
+    print()
+    # with open("./myfile.json", "w+") as file:
+    #     file.write(json.dumps(album_items))
+
+    # s3Client.put_object(
+    #             Body=open("./myfile.json", "rb"), Bucket=BUCKET_NAME, Key="staging_data/json"
+    #         )
+except Exception as e:
+    logging.error(
+                {
+                    "Message": f"Error occurred during uploading staging json data {e} ",
+                    "line": format(
+                        sys.exc_info()[
+                            -1
+                        ].tb_lineno  # pyright: ignore[reportOptionalMemberAccess]
+                    ),
+                }
+            )
+
+# sc = SparkContext()
+# glueContext = GlueContext(sc)
+# # Spark Session, the entry point to programming Spark with the Dataset and DataFrame API
+# spark = glueContext.spark_session
+
+
+
+# try:
+#     source_df = glueContext.create_dynamic_frame.from_options(
+#         format_options={"multiline": False},
+#         connection_type="s3",
+#         format="json",
+#         connection_options={
+#             "paths": [f"s3://{args['s3_bucket']}/{args['source_path']}"],
+#             "recurse": True,
+#         },
+#         transformation_ctx="source_df",
+#     )
+
+#     schema = StructType([StructField("preview_url", StringType(), True)])
+#     # Convert Glue DynamicFrame to Spark DataFrame
+#     source_df = source_df.toDF()
+#     # Convert Spark DataFrame to Pandas DataFrame
+#     source_pd = source_df.toPandas()
+#     logging.info({
+#         "Message": f"Curated data pandas df: {source_pd.head()}"
+#     })
+#     # df = pd.DataFrame.from_dict({"id":1, "data":album_items})
+#     # df = df.transpose()
+#     # Generate a Spark DataFrame from dict
+#     dest_pd = spark.createDataFrame(source_df, schema=schema)
+#     # Generate a  Glue DynamicFrame from Spark DataFrame
+#     dest_df = DynamicFrame.fromDF(dest_pd, glueContext, "dest_df")
+#     # Instanciate a Glue Job with the Glue context
+#     job = Job(glueContext)
+#     # Initialize the Job
+#     job.init(args["JOB_NAME"], args)
+#     connection_options = {
+#         "path": f"s3://{args['s3_bucket']}/{args['target_path']}/",
+#     }
+
+#     # Write the previous Glue DynamicFrame to a parquet file in a given S3 path
+#     datasink = glueContext.write_dynamic_frame.from_options(
+#         frame=dest_df,
+#         connection_type="s3",
+#         format="glueparquet",
+#         connection_options=connection_options,
+#         transformation_ctx="datasink",
+#     )
+# except Exception as err:
+#     logging.error(
+#                 {
+#                     "Message": f"Error occurred during uploading curated data {err} ",
+#                     "line": format(
+#                         sys.exc_info()[
+#                             -1
+#                         ].tb_lineno  # pyright: ignore[reportOptionalMemberAccess]
+#                     ),
+#                 }
+#             )
