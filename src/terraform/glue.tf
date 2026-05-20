@@ -23,8 +23,9 @@ resource "aws_glue_job" "spotify_staging_api" {
     "--conf"                                = "spark.rpc.message.maxSize=2000"
     "--enable-metrics"                      = "true"
     "--s3_bucket"                           = var.spapi_bucket_name
-    "--target_path"                         = "staging_data/"
-    "--additional-python-modules"           = "dotenv, requests"
+    "--target_path"                         = "processed_data/"
+    "--source_path"                         = "staging_data/"
+    "--additional-python-modules"           = "dotenv, requests, pandas"
   }
 
   timeout = 500
