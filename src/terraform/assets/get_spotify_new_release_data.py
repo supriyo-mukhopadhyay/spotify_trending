@@ -14,18 +14,28 @@ from awsglue.job import Job
 import time
 import pandas as pd
 import boto3
+from typing import Dict
 
 load_dotenv()
 # Get arguments that are passed when running the script
-# args = getResolvedOptions(
-#     sys.argv,
-#     [
-#         "JOB_NAME",
-#         "s3_bucket",
-#         "target_path",
-#         "source_path"
-#     ],
-# )
+args = getResolvedOptions(
+    sys.argv,
+    [
+        "JOB_NAME",
+        "s3_bucket",
+        "target_path",
+        "source_path"
+    ],
+)
+
+sc = SparkContext()
+glueContext = GlueContext(sc)
+# Spark Session, the entry point to programming Spark with the Dataset and DataFrame API
+spark = glueContext.spark_session
+
+job = Job(glueContext)
+# Initialize the Job
+job.init(args["JOB_NAME"], args)
 
 
 CLIENT_ID = "8d1b1e30ecea43daa9f4d3bfc41c9414"
@@ -268,18 +278,53 @@ new_releases = ep.get_paginated_new_releases(
 
 albums_ids = [album["id"] for album in new_releases]
 
-import csv
-album_items = {}
-#5apkkoLPJJYZcghFfuNTF3
+album_items = []
 
-# album_data = ep.get_paginated_album_tracks(
-#         base_url=URL_ALBUM_TRACKS,
-#         access_token=token["access_token"],
-#         album_id="5apkkoLPJJYZcghFfuNTF3",
-#         get_token=auth.get_token,
-#         **kwargs,
-#     )
-# print(album_data)
+def transform_data(album_data):
+    
+    album_item = {}
+    for x in album_data:
+        artist_external_urls="" 
+        artist_href = ""
+        artist_id = ""
+        artist_name = ""
+        artist_type = ""
+        artist_uri = ""
+        available_markets = ""
+        
+        album_item["album_id"] = album_id
+        album_item["number_of_artist"] = len(x["artists"])
+        for y in x["artists"]:
+            artist_external_urls = artist_external_urls + y["external_urls"]["spotify"] +","
+            artist_href = artist_href + y["href"] + ","
+            artist_id = artist_id + y["id"] + ","
+            artist_name = artist_name + y["name"] + ","
+            artist_type = artist_type + y["type"] + ","
+            artist_uri = artist_uri + y["uri"] + ","
+        album_item["artist_external_urls"] = artist_external_urls
+        album_item["artist_href"] = artist_href
+        album_item["artist_id"] = artist_id
+        album_item["artist_name"] = artist_name
+        album_item["artist_type"] = artist_type
+        album_item["artist_uri"] = artist_uri
+        album_item["available_markets"] = len(x["available_markets"])
+        for y in x["available_markets"]:
+            available_markets = available_markets + y + ","
+        album_item["available_markets"] = available_markets
+        album_item["disc_number"] = x["disc_number"]
+        album_item["duration_ms"] = x["duration_ms"]
+        album_item["explicit"] = x["explicit"]
+        album_item["external_urls"] = x["external_urls"]
+        album_item["href"] = x["href"]
+        album_item["id"] = x["id"]
+        album_item["name"] = x["name"]
+        album_item["preview_url"] = str(x["preview_url"])
+        album_item["track_number"] = x["track_number"]
+        album_item["type"] = x["type"]
+        album_item["uri"] = x["uri"]
+        album_item["is_local"] = x["is_local"]  
+        
+    return album_item
 
 for album_id in albums_ids:
 
@@ -290,25 +335,11 @@ for album_id in albums_ids:
         get_token=auth.get_token,
         **kwargs,
     )
-    # album_items["id"] = album_id
-    album_items[album_id] = album_data
-    Ed = album_items[album_id]
-    df = open('data_file.csv', 'w')
-    cw = csv.writer(df)
-#     logging.info({"message": f"Album id {album_id} processed."})
-c = 0
-for emp in Ed:
-    if c == 0:
+     
+    album_item = transform_data(album_data)
+    album_items.append(album_item)  
 
-        # Writing headers of CSV file
-        h = emp.keys()
-        cw.writerow(h)
-        c += 1
 
-    # Writing data of CSV file
-    cw.writerow(emp.values())
-
-df.close()
 session = boto3.Session(
     aws_access_key_id=ACCESS_KEY,
     aws_secret_access_key=SECRET_ACCESS_KEY,
@@ -325,12 +356,12 @@ s3Client = boto3.client(
 
 try:
     print()
-    # with open("./myfile.json", "w+") as file:
-    #     file.write(json.dumps(album_items))
+    with open("./myfile.json", "w+") as file:
+        file.write(json.dumps(album_items))
 
-    # s3Client.put_object(
-    #             Body=open("./myfile.json", "rb"), Bucket=BUCKET_NAME, Key="staging_data/json"
-    #         )
+    s3Client.put_object(
+                Body=json.dumps(album_items), Bucket=BUCKET_NAME, Key="staging_data/json"
+            )
 except Exception as e:
     logging.error(
                 {
@@ -343,63 +374,47 @@ except Exception as e:
                 }
             )
 
-# sc = SparkContext()
-# glueContext = GlueContext(sc)
-# # Spark Session, the entry point to programming Spark with the Dataset and DataFrame API
-# spark = glueContext.spark_session
+# df = pd.DataFrame(album_items)
+# print(df.head)
 
+try:
+    #Create pandas data frame
+    source_pd = pd.DataFrame(album_items)
+    logging.info({
+        "Message": f"Curated data pandas df: {source_pd.head()}"
+    })
+    
+    # Generate a Spark DataFrame from Pandas DataFrame
+    dest_pd = spark.createDataFrame(source_pd)
+    
+    # Generate a  Glue DynamicFrame from Spark DataFrame
+    dest_df = DynamicFrame.fromDF(dest_pd, glueContext, "dest_df")
+    
+    # Instanciate a Glue Job with the Glue context
+    connection_options = {
+        "path": f"s3://{args['s3_bucket']}/{args['target_path']}/",
+    }
 
+    # Write the previous Glue DynamicFrame to a parquet file in a given S3 path
+    datasink = glueContext.write_dynamic_frame.from_options(
+        frame=dest_df,
+        connection_type="s3",
+        format="glueparquet",
+        connection_options=connection_options,
+        transformation_ctx="datasink",
+    )
+    
+    
+except Exception as err:
+    logging.error(
+                {
+                    "Message": f"Error occurred during uploading curated data {err} ",
+                    "line": format(
+                        sys.exc_info()[
+                            -1
+                        ].tb_lineno  # pyright: ignore[reportOptionalMemberAccess]
+                    ),
+                }
+            )
 
-# try:
-#     source_df = glueContext.create_dynamic_frame.from_options(
-#         format_options={"multiline": False},
-#         connection_type="s3",
-#         format="json",
-#         connection_options={
-#             "paths": [f"s3://{args['s3_bucket']}/{args['source_path']}"],
-#             "recurse": True,
-#         },
-#         transformation_ctx="source_df",
-#     )
-
-#     schema = StructType([StructField("preview_url", StringType(), True)])
-#     # Convert Glue DynamicFrame to Spark DataFrame
-#     source_df = source_df.toDF()
-#     # Convert Spark DataFrame to Pandas DataFrame
-#     source_pd = source_df.toPandas()
-#     logging.info({
-#         "Message": f"Curated data pandas df: {source_pd.head()}"
-#     })
-#     # df = pd.DataFrame.from_dict({"id":1, "data":album_items})
-#     # df = df.transpose()
-#     # Generate a Spark DataFrame from dict
-#     dest_pd = spark.createDataFrame(source_df, schema=schema)
-#     # Generate a  Glue DynamicFrame from Spark DataFrame
-#     dest_df = DynamicFrame.fromDF(dest_pd, glueContext, "dest_df")
-#     # Instanciate a Glue Job with the Glue context
-#     job = Job(glueContext)
-#     # Initialize the Job
-#     job.init(args["JOB_NAME"], args)
-#     connection_options = {
-#         "path": f"s3://{args['s3_bucket']}/{args['target_path']}/",
-#     }
-
-#     # Write the previous Glue DynamicFrame to a parquet file in a given S3 path
-#     datasink = glueContext.write_dynamic_frame.from_options(
-#         frame=dest_df,
-#         connection_type="s3",
-#         format="glueparquet",
-#         connection_options=connection_options,
-#         transformation_ctx="datasink",
-#     )
-# except Exception as err:
-#     logging.error(
-#                 {
-#                     "Message": f"Error occurred during uploading curated data {err} ",
-#                     "line": format(
-#                         sys.exc_info()[
-#                             -1
-#                         ].tb_lineno  # pyright: ignore[reportOptionalMemberAccess]
-#                     ),
-#                 }
-#             )
+job.commit()
