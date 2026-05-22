@@ -50,9 +50,7 @@
 
 ## Project
 
-'''
 As a Data Engineer, I worked on collecting and analyzing the latest song releases and streaming trends from Spotify to identify the most trending songs globally. The project involved extracting real-time music chart data, and generating analytical reports to highlight current listening trends and audience preferences.
-'''
 
 ## Key Features
 
@@ -63,3 +61,5 @@ As a Data Engineer, I worked on collecting and analyzing the latest song release
 5. Create dynamic dataframes using SparkContext and GlueContext and write dynamic data frames into s3
 
 ## Project Architecture
+
+![alt text](image-1.png)
